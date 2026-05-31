@@ -52,21 +52,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - run: pip install -r shared/requirements.txt
-      - run: pytest modules/05-evaluation-testing/examples/tests/test_structure.py -v
+      - uses: astral-sh/setup-uv@v4
+      - run: make install
+      - run: make eval
 
   lint:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - run: pip install ruff
-      - run: ruff check .
+      - uses: astral-sh/setup-uv@v4
+      - run: uv run ruff check .
 
   golden-set-eval:
     needs: [structural-tests, lint]
@@ -77,15 +72,13 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
+      - uses: astral-sh/setup-uv@v4
       - uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
           service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
-      - run: pip install -r shared/requirements.txt
-      - run: pytest modules/05-evaluation-testing/examples/tests/test_golden_set.py -v
+      - run: make install
+      - run: PYTHONPATH=modules/03-python-scripting/examples uv run pytest modules/05-evaluation-testing/examples/tests/test_golden_set.py -v
         env:
           GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
 

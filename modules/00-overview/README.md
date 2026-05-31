@@ -38,13 +38,23 @@ git clone https://github.com/your-org/genai-quality-engineering.git
 cd genai-quality-engineering
 ```
 
-### 2. Create a Python virtual environment
+### 2. Install dependencies with uv
+
+Install [uv](https://docs.astral.sh/uv/getting-started/installation/) if you
+do not have it yet:
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate        # Windows: .venv\Scripts\activate
-pip install -r shared/requirements.txt
+curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
+
+Then install all dependencies (app + dev):
+
+```bash
+make install
+# equivalent to: uv sync --all-groups
+```
+
+`uv` creates and manages the virtual environment automatically in `.venv`.
 
 ### 3. Authenticate with Google Cloud
 
@@ -62,7 +72,7 @@ gcloud services enable aiplatform.googleapis.com
 ### 5. Verify the setup
 
 ```bash
-python shared/utils/verify_setup.py
+uv run python shared/utils/verify_setup.py
 ```
 
 You should see:
