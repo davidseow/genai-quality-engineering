@@ -14,22 +14,39 @@ your GenAI outputs.
 
 ## The Six Techniques
 
-### 1. Be Explicit About Output Format
+### 1. Enforce Output Format via the API, Not the Prompt
 
-Vague instructions produce vague outputs. If you need JSON, say so — and give
-an example.
+Telling the model to "respond in JSON" in the system instruction is unreliable
+— at high temperatures or on unusual inputs the model can produce markdown
+fences, extra commentary, or malformed JSON.
 
-**Before:**
-```
-Summarise this ticket and suggest a reply.
+Use the model's **structured output** feature instead. Pass a JSON schema to
+`GenerationConfig` and the model's decoding is constrained to match it:
+
+```python
+from vertexai.generative_models import GenerationConfig
+
+config = GenerationConfig(
+    temperature=0.2,
+    max_output_tokens=300,
+    response_mime_type="application/json",
+    response_schema={
+        "type": "object",
+        "properties": {
+            "urgency": {"type": "string", "enum": ["low", "medium", "high"]},
+            "topic":   {"type": "string"},
+            "reply":   {"type": "string"},
+        },
+        "required": ["urgency", "topic", "reply"],
+    },
+)
 ```
 
-**After:**
-```
-Respond only with valid JSON matching this schema:
-{"urgency": "low|medium|high", "topic": "<three words>", "reply": "<string>"}
-Do not include any text outside the JSON object.
-```
+Benefits over a prompt instruction:
+- The `urgency` field **cannot** contain a value outside the enum, even at
+  temperature 1.0.
+- `response.text` is always clean JSON — no markdown fences to strip.
+- The schema is version-controlled alongside the code, not buried in a string.
 
 ---
 
@@ -61,12 +78,17 @@ Example input:
   Body: I ordered a blue mug but received a red one.
 
 Example output:
-  {"urgency": "medium", "topic": "wrong item", "reply": "We are sorry to hear
-  the wrong item was sent. We will arrange a replacement and return label
-  within 24 hours."}
+  urgency: medium
+  topic: wrong item received
+  reply: We are sorry to hear the wrong item was sent. We will arrange a
+  replacement and return label within 24 hours.
 
 Now process the following ticket:
 ```
+
+The example output does not need to be JSON — structured output handles the
+format. Keep examples focused on the *content* and *reasoning* you want, not
+the serialisation format.
 
 ---
 
@@ -79,7 +101,7 @@ step-by-step before giving the final answer.
 First, identify any time-sensitive phrases in the ticket.
 Then, identify any emotional signals (frustration, urgency).
 Finally, based on those observations, classify the urgency.
-Return only the final JSON — do not include your reasoning in the output.
+Return only the final classification — do not include your reasoning in the output.
 ```
 
 ---
@@ -95,34 +117,34 @@ config = GenerationConfig(temperature=0.2, max_output_tokens=300)
 
 ---
 
-### 6. Defensive Output Validation
+### 6. Validate Business Rules, Not Format
 
-Never trust the model to always return valid JSON. Always parse with a
-try/except and validate required fields.
+With structured output enabled, `response.text` is guaranteed valid JSON that
+matches the schema — you do not need to strip markdown fences or re-validate
+the structure. Focus your validation on **business rules** the schema cannot
+express:
 
 ```python
 import json
-from jsonschema import validate, ValidationError
-
-SCHEMA = {
-    "type": "object",
-    "required": ["urgency", "topic", "reply"],
-    "properties": {
-        "urgency": {"enum": ["low", "medium", "high"]},
-        "topic": {"type": "string"},
-        "reply": {"type": "string"},
-    },
-}
+from .models import TriageResult, Urgency
 
 
-def safe_parse(text: str) -> dict:
-    try:
-        data = json.loads(text.strip().removeprefix("```json").removesuffix("```").strip())
-        validate(instance=data, schema=SCHEMA)
-        return data
-    except (json.JSONDecodeError, ValidationError) as exc:
-        raise ValueError(f"Model returned invalid output: {exc}") from exc
+def parse_and_validate(text: str) -> TriageResult:
+    data = json.loads(text)
+    result = TriageResult(
+        urgency=Urgency(data["urgency"]),   # raises ValueError if out of enum
+        topic=data["topic"],
+        reply=data["reply"],
+    )
+    if len(result.reply.split()) > 150:
+        raise ValueError("Reply exceeds word limit — check system instruction")
+    return result
 ```
+
+Things worth validating at this layer:
+- Word count / length limits
+- Presence of forbidden content (e.g., URLs, PII patterns)
+- Business-specific constraints (e.g., urgency escalation rules)
 
 ---
 

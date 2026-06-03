@@ -57,8 +57,12 @@ class TriageResult:
 
 ## Step 2 — Separate Prompt Construction
 
-Keep the prompt text out of the API call. This makes it easy to test and
-update independently.
+Keep the prompt text and the output schema out of the API call. This makes
+both easy to test and update independently.
+
+The system instruction describes *what to do* — the schema describes *what to
+return*. Keeping them separate means you can tighten the schema without
+touching the instructions, and vice versa.
 
 ```python
 # triage/prompts.py
@@ -69,9 +73,28 @@ Given a support ticket, you will:
 2. Identify the main topic in three words or fewer.
 3. Draft a polite, concise reply of no more than 100 words.
 
-Always respond in JSON with the keys: urgency, topic, reply.
 Never include the customer's name or any personal details in the reply.
 """
+
+RESPONSE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "urgency": {
+            "type": "string",
+            "enum": ["low", "medium", "high"],
+            "description": "Urgency level of the support ticket",
+        },
+        "topic": {
+            "type": "string",
+            "description": "Main topic in three words or fewer",
+        },
+        "reply": {
+            "type": "string",
+            "description": "Polite, concise reply of no more than 100 words",
+        },
+    },
+    "required": ["urgency", "topic", "reply"],
+}
 
 
 def build_user_message(ticket: "SupportTicket") -> str:
@@ -96,7 +119,7 @@ import vertexai
 from vertexai.generative_models import GenerativeModel, GenerationConfig
 
 from .models import SupportTicket, TriageResult, Urgency
-from .prompts import SYSTEM_INSTRUCTION, build_user_message
+from .prompts import RESPONSE_SCHEMA, SYSTEM_INSTRUCTION, build_user_message
 
 logger = logging.getLogger(__name__)
 
@@ -114,7 +137,12 @@ def triage_ticket(
         model_name="gemini-1.5-pro",
         system_instruction=SYSTEM_INSTRUCTION,
     )
-    config = GenerationConfig(temperature=0.2, max_output_tokens=300)
+    config = GenerationConfig(
+        temperature=0.2,
+        max_output_tokens=300,
+        response_mime_type="application/json",
+        response_schema=RESPONSE_SCHEMA,
+    )
     message = build_user_message(ticket)
 
     last_error: Optional[Exception] = None
@@ -132,9 +160,7 @@ def triage_ticket(
 
 
 def _parse_response(text: str) -> TriageResult:
-    # Strip markdown fences if present
-    cleaned = text.strip().removeprefix("```json").removesuffix("```").strip()
-    data = json.loads(cleaned)
+    data = json.loads(text)
     return TriageResult(
         urgency=Urgency(data["urgency"]),
         topic=data["topic"],
@@ -194,6 +220,6 @@ extend without rewriting everything.
 
 1. Copy the code snippets above into the `examples/triage/` folder.
 2. Run `python -m triage` with a real GCP project and confirm it works.
-3. Deliberately break the JSON output (edit `SYSTEM_INSTRUCTION` to ask for
-   plain text) and observe what `_parse_response` does. Then fix it.
+3. Temporarily remove `response_mime_type` and `response_schema` from the
+   config and re-run — observe the raw output. Then restore them.
 4. Add a second test ticket from your risk register and print both results.

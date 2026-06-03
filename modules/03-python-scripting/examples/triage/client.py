@@ -7,7 +7,7 @@ import vertexai
 from vertexai.generative_models import GenerationConfig, GenerativeModel
 
 from .models import SupportTicket, TriageResult, Urgency
-from .prompts import SYSTEM_INSTRUCTION, build_user_message
+from .prompts import RESPONSE_SCHEMA, SYSTEM_INSTRUCTION, build_user_message
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +25,12 @@ def triage_ticket(
         model_name="gemini-1.5-pro",
         system_instruction=SYSTEM_INSTRUCTION,
     )
-    config = GenerationConfig(temperature=0.2, max_output_tokens=300)
+    config = GenerationConfig(
+        temperature=0.2,
+        max_output_tokens=300,
+        response_mime_type="application/json",
+        response_schema=RESPONSE_SCHEMA,
+    )
     message = build_user_message(ticket)
 
     last_error: Optional[Exception] = None
@@ -43,8 +48,7 @@ def triage_ticket(
 
 
 def _parse(text: str) -> TriageResult:
-    cleaned = text.strip().removeprefix("```json").removesuffix("```").strip()
-    data = json.loads(cleaned)
+    data = json.loads(text)
     return TriageResult(
         urgency=Urgency(data["urgency"]),
         topic=data["topic"],

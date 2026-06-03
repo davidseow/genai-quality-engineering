@@ -11,10 +11,11 @@ def test_parse_valid_json():
     assert len(result.reply) > 0
 
 
-def test_parse_strips_markdown_fences():
-    raw = '```json\n{"urgency": "low", "topic": "feedback", "reply": "Thanks!"}\n```'
-    result = _parse(raw)
-    assert result.urgency == Urgency.LOW
+def test_parse_all_urgency_levels():
+    for level in ("low", "medium", "high"):
+        raw = f'{{"urgency": "{level}", "topic": "test", "reply": "OK."}}'
+        result = _parse(raw)
+        assert result.urgency == Urgency(level)
 
 
 def test_parse_raises_on_missing_key():

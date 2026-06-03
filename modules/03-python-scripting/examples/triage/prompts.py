@@ -11,9 +11,28 @@ Given a support ticket, you will:
 2. Identify the main topic in three words or fewer.
 3. Draft a polite, concise reply of no more than 100 words.
 
-Always respond in JSON with the keys: urgency, topic, reply.
 Never include the customer's name or any personal details in the reply.
 """
+
+RESPONSE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "urgency": {
+            "type": "string",
+            "enum": ["low", "medium", "high"],
+            "description": "Urgency level of the support ticket",
+        },
+        "topic": {
+            "type": "string",
+            "description": "Main topic in three words or fewer",
+        },
+        "reply": {
+            "type": "string",
+            "description": "Polite, concise reply of no more than 100 words",
+        },
+    },
+    "required": ["urgency", "topic", "reply"],
+}
 
 
 def build_user_message(ticket: SupportTicket) -> str:

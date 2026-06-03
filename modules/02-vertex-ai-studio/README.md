@@ -46,9 +46,13 @@ Given a support ticket, you will:
 2. Identify the main topic in three words or fewer.
 3. Draft a polite, concise reply of no more than 100 words.
 
-Always respond in JSON with the keys: urgency, topic, reply.
 Never include the customer's name or any personal details in the reply.
 ```
+
+Notice there is **no instruction telling the model to respond in JSON**. Instead,
+you enforce the output format through the model's structured output feature (see
+Step 3a below). This is more reliable than a prompt instruction because the
+model's decoding is constrained to match the schema.
 
 Paste this into the **User message** box:
 
@@ -61,9 +65,40 @@ item. Please help urgently.
 
 ---
 
-## Step 3 — Understand the Output
+## Step 3 — Enable Structured Output
 
-A well-formed response looks like:
+In Vertex AI Studio, click **Output format** (or **Response format**) and select
+**JSON**. Then paste the following schema into the schema editor:
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "urgency": {
+      "type": "string",
+      "enum": ["low", "medium", "high"],
+      "description": "Urgency level of the support ticket"
+    },
+    "topic": {
+      "type": "string",
+      "description": "Main topic in three words or fewer"
+    },
+    "reply": {
+      "type": "string",
+      "description": "Polite, concise reply of no more than 100 words"
+    }
+  },
+  "required": ["urgency", "topic", "reply"]
+}
+```
+
+The model's decoding is now constrained to this schema — it cannot produce
+invalid JSON or use unexpected field names.
+
+## Step 3a — Understand the Output
+
+Because structured output is enabled, the response is always clean JSON with no
+markdown fences:
 
 ```json
 {
@@ -85,7 +120,7 @@ A well-formed response looks like:
 | **Temperature** | Randomness of output | Lower to 0.2 for consistent classification |
 | **Top-P** | Vocabulary breadth | Leave at default (0.95) for now |
 | **Max output tokens** | Length cap | Set to 300 to avoid verbose replies |
-| **Stop sequences** | Where the model stops | Add `}` to enforce JSON termination |
+| **Response format** | Output schema enforcement | Set to JSON + schema (see Step 3) |
 
 Experiment: raise temperature to 1.0 and re-run the same ticket five times.
 Note how the `urgency` classification changes. This illustrates why temperature
@@ -119,8 +154,11 @@ Module 03.
 
 ## Exercise
 
-1. Run the ticket above in Vertex AI Studio and confirm you get valid JSON.
-2. Try three different temperature values (0.1, 0.5, 1.0) and note the
-   difference in outputs.
-3. Add a new test input that targets one of your risk register items.
-4. Export the prompt as Python and save it to `examples/exported_prompt.py`.
+1. Enable structured output in Studio using the schema above, then run the
+   sample ticket and confirm the response is clean JSON with no markdown fences.
+2. Try three different temperature values (0.1, 0.5, 1.0) — note that
+   `urgency` stays constrained to the enum regardless of temperature.
+3. Remove the schema and re-run at temperature 1.0 — observe how the output
+   format becomes unpredictable without structured output.
+4. Add a new test input that targets one of your risk register items.
+5. Export the prompt as Python and save it to `examples/exported_prompt.py`.
