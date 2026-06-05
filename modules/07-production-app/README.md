@@ -156,13 +156,15 @@ def publish_for_review(ticket_subject: str, result: dict) -> None:
 ```dockerfile
 FROM python:3.12-slim
 
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+
 WORKDIR /app
-COPY shared/requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+COPY pyproject.toml ./
+RUN uv sync --no-dev --no-cache
 
 COPY app/ ./app/
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080"]
+CMD ["uv", "run", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080"]
 ```
 
 ---
@@ -184,13 +186,77 @@ gcloud run deploy triage-api \
 
 ---
 
+## Testing the Production App
+
+Testing the API layer is essential — you need to verify the HTTP contract
+independently of the model. Use FastAPI's `TestClient` with mocked model calls
+so tests run fast without GCP credentials.
+
+```python
+# tests/test_api.py
+from fastapi.testclient import TestClient
+from unittest.mock import patch, MagicMock
+from app.main import app
+
+client = TestClient(app)
+
+
+def test_healthz_returns_ok():
+    response = client.get("/healthz")
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}
+
+
+def _mock_triage(urgency="high", topic="late delivery", reply="We are on it."):
+    mock = MagicMock()
+    mock.urgency.value = urgency
+    mock.topic = topic
+    mock.reply = reply
+    return mock
+
+
+def test_triage_endpoint_returns_valid_response():
+    with patch("app.services.triage.triage_ticket", return_value=_mock_triage()):
+        response = client.post(
+            "/v1/triage",
+            json={"subject": "Order late", "body": "3 weeks and nothing arrived"},
+        )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["urgency"] == "high"
+    assert isinstance(body["reply"], str)
+    assert "routed_for_review" in body
+
+
+def test_triage_endpoint_returns_500_on_model_failure():
+    with patch("app.services.triage.triage_ticket", side_effect=RuntimeError("API down")):
+        response = client.post(
+            "/v1/triage",
+            json={"subject": "Test", "body": "Test body"},
+        )
+    assert response.status_code == 500
+
+
+def test_triage_endpoint_rejects_empty_body():
+    response = client.post("/v1/triage", json={"subject": "", "body": ""})
+    # Empty inputs should either be validated (422) or handled gracefully (200)
+    assert response.status_code in (200, 422)
+
+
+def test_triage_endpoint_validates_request_schema():
+    response = client.post("/v1/triage", json={"wrong_field": "value"})
+    assert response.status_code == 422
+```
+
+---
+
 ## Exercise
 
 1. Copy the code snippets above into `modules/07-production-app/examples/app/`.
-2. Run the app locally: `uvicorn app.main:app --reload`
+2. Run the app locally: `uv run uvicorn app.main:app --reload`
 3. Open `http://localhost:8000/docs` — confirm the Swagger UI shows the
    `/v1/triage` endpoint.
-4. Send a POST request using `curl` or the Swagger UI and confirm you get a
-   valid response.
-5. Add a test in `tests/` that calls the FastAPI `TestClient` against
-   `/v1/triage` without making a real API call (use `unittest.mock.patch`).
+4. Run the API tests above using `TestClient` and confirm they pass without
+   any GCP credentials.
+5. Add a test that verifies the `confidence` field in the response is a float
+   between 0 and 1.

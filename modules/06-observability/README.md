@@ -23,6 +23,7 @@ GenAI services have failure modes that traditional services do not:
 | **Output validity rate** | How often does the model return valid structured output? |
 | **Classification distribution** | A sudden spike in "high" urgency may indicate a prompt regression |
 | **Retry rate** | High retry rate signals API instability |
+| **Consistency rate** | Proxy for confidence — how often does the model agree with itself across multiple calls? |
 
 ---
 
@@ -139,6 +140,47 @@ def record_urgency(project_id: str, urgency: str) -> None:
 
 Set an alert if `high` urgency exceeds 40% of total classifications over a
 5-minute window — that may indicate a prompt regression or data quality issue.
+
+---
+
+## Step 5 — Measuring Confidence Without Logprobs
+
+Gemini does not expose token-level logprobs, so you cannot read a confidence
+score directly from the response. Instead, use **consistency as a proxy**:
+run the model three times on the same input at low temperature and measure
+agreement across runs.
+
+```python
+from triage.client import triage_ticket
+from triage.models import SupportTicket, Urgency
+
+
+def classify_with_confidence(
+    ticket: SupportTicket,
+    project_id: str,
+    runs: int = 3,
+) -> tuple[Urgency, float]:
+    """Returns the most common urgency and a confidence score (0.33–1.0)."""
+    results = [triage_ticket(ticket, project_id) for _ in range(runs)]
+    urgencies = [r.urgency for r in results]
+    most_common = max(set(urgencies), key=urgencies.count)
+    confidence = urgencies.count(most_common) / runs
+    return most_common, confidence
+```
+
+Usage in the routing decision:
+```python
+urgency, confidence = classify_with_confidence(ticket, project_id)
+if confidence < 0.67:          # 2/3 or fewer agreed
+    publish_for_review(ticket, urgency, confidence)
+else:
+    send_reply(urgency)
+```
+
+**Trade-off:** This costs 3× the API calls and adds latency. Use it for tickets
+where the cost of a wrong classification is high — e.g., `high` urgency
+misclassified as `low`. Log the confidence score for every request so you can
+track it over time.
 
 ---
 

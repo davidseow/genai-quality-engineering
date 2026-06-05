@@ -11,7 +11,7 @@ help:
 	@echo ""
 	@echo "  install   Install app + dev dependencies (requires uv)"
 	@echo "  start     Run the triage app  (requires GCP_PROJECT_ID)"
-	@echo "  eval      Run structural evaluation tests (no API calls)"
+	@echo "  eval      Run all no-API tests (structural, adversarial, retry contract)"
 
 # ── install ────────────────────────────────────────────────────────────────────
 .PHONY: install

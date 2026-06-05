@@ -1,4 +1,4 @@
-# Module 03 — Scripting Prompts in Python
+# Module 03 — Reading & Understanding the Codebase
 
 **Duration:** ~60 minutes
 
@@ -6,9 +6,14 @@
 
 ## Learning Outcome
 
-By the end of this module you will have converted your Vertex AI Studio
-prototype into a clean, reusable Python module with typed inputs and outputs,
-basic error handling, and a retry strategy.
+By the end of this module you will be able to read the triage codebase,
+identify every testable unit, understand what each function promises and what
+it does not, and map those contracts to the test types you will write in
+Module 05.
+
+> **QE note:** You do not need to build this code from scratch. You need to
+> understand it well enough to test it confidently and to catch regressions
+> when it changes. That is a different — and equally important — skill.
 
 ---
 
@@ -208,18 +213,62 @@ triage/
 ├── __main__.py
 ├── client.py        ← API call + retry
 ├── models.py        ← typed data classes
-└── prompts.py       ← prompt text
+└── prompts.py       ← prompt text + response schema
 ```
 
-This structure is small enough to understand at a glance and large enough to
-extend without rewriting everything.
+---
+
+## Testability Analysis — What a QE Sees in This Code
+
+After reading the codebase, a QE should produce an analysis like this. It
+directly maps to the test types in Module 05.
+
+### Pure functions — test in isolation, no API call needed
+
+| Function | In | Out | What to test |
+|----------|-----|-----|-------------|
+| `_parse(text)` | JSON string | `TriageResult` | Valid JSON → correct object; bad urgency → `ValueError`; missing key → `KeyError`; unicode in reply → preserved |
+| `build_user_message(ticket)` | `SupportTicket` | `str` | Subject and body appear in output; PII is preserved as-is (stripping happens elsewhere) |
+| `Urgency(value)` | `str` | `Urgency` | "low"/"medium"/"high" → enum; anything else → `ValueError` — these are your boundary values |
+
+### Functions requiring mocking — test behaviour without real API calls
+
+| Function | What to mock | What to test |
+|----------|-------------|-------------|
+| `triage_ticket()` | `model.generate_content` | Happy path returns `TriageResult`; API raises → retried 3 times with correct delays; all retries fail → `RuntimeError` |
+
+### The retry contract (test this explicitly)
+
+`_BACKOFF = [1, 2, 4]` — the code promises:
+- At most 3 attempts
+- 1 second wait after attempt 1, 2 seconds after attempt 2
+- After all 3 fail, raises `RuntimeError` wrapping the last exception
+
+```python
+# Test the retry contract without waiting real seconds
+from unittest.mock import patch, MagicMock
+import pytest
+from triage.client import triage_ticket
+from triage.models import SupportTicket
+
+def test_retries_three_times_then_raises():
+    ticket = SupportTicket("Test", "Test body")
+    with patch("triage.client.GenerativeModel") as MockModel, \
+         patch("triage.client.time.sleep") as mock_sleep:
+        MockModel.return_value.generate_content.side_effect = Exception("API error")
+        with pytest.raises(RuntimeError, match="All 3 attempts failed"):
+            triage_ticket(ticket, project_id="test-project")
+        assert MockModel.return_value.generate_content.call_count == 3
+        assert mock_sleep.call_count == 2   # sleeps between attempts, not after last
+```
 
 ---
 
 ## Exercise
 
-1. Copy the code snippets above into the `examples/triage/` folder.
-2. Run `python -m triage` with a real GCP project and confirm it works.
-3. Temporarily remove `response_mime_type` and `response_schema` from the
+1. Run `python -m triage` with a real GCP project and confirm it works.
+2. Temporarily remove `response_mime_type` and `response_schema` from the
    config and re-run — observe the raw output. Then restore them.
-4. Add a second test ticket from your risk register and print both results.
+3. Write the retry contract test above and run it with `make eval`. It should
+   pass with no API calls.
+4. Identify one more pure function in the codebase and write two tests for it.

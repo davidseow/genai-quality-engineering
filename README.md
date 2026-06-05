@@ -13,10 +13,11 @@ engineering best practices.
 |--------|-------|----------|
 | 00 | [Course Overview & Prerequisites](modules/00-overview/README.md) | 15 min |
 | 01 | [Risk-Storming for GenAI](modules/01-risk-storming/README.md) | 45 min |
+| 01b | [Test Data Management](modules/01b-test-data-management/README.md) | 45 min |
 | 02 | [Rapid Prototyping in Vertex AI Studio](modules/02-vertex-ai-studio/README.md) | 60 min |
-| 03 | [Scripting Prompts in Python](modules/03-python-scripting/README.md) | 60 min |
+| 03 | [Reading & Understanding the Codebase](modules/03-python-scripting/README.md) | 60 min |
 | 04 | [Prompt Engineering Best Practices](modules/04-prompt-engineering/README.md) | 45 min |
-| 05 | [Evaluation & Testing GenAI Outputs](modules/05-evaluation-testing/README.md) | 60 min |
+| 05 | [Evaluation & Testing GenAI Outputs](modules/05-evaluation-testing/README.md) | 90 min |
 | 06 | [Observability & Monitoring](modules/06-observability/README.md) | 45 min |
 | 07 | [Building a Production App](modules/07-production-app/README.md) | 90 min |
 | 08 | [CI/CD for GenAI Pipelines](modules/08-cicd/README.md) | 45 min |
@@ -27,11 +28,11 @@ engineering best practices.
 ## Learning Journey
 
 ```
-Risk-Storming → Prototype (Studio) → Script (Python) → Engineer → Test → Ship
+Risk-Storm → Manage Test Data → Prototype → Understand Code → Engineer → Test → Ship
 ```
 
 Each module is **self-contained** with:
-- A clear learning outcome
+- A clear learning outcome (including a QE-specific perspective)
 - Step-by-step instructions
 - Concrete examples you can run
 - A short exercise to consolidate learning
@@ -42,7 +43,7 @@ Each module is **self-contained** with:
 
 - A Google Cloud project with the Vertex AI API enabled
 - Python 3.10+
-- Basic familiarity with Python (functions, classes, pip)
+- Ability to read Python code; writing experience helpful but not required
 - No prior GenAI experience required
 
 ---
@@ -64,6 +65,7 @@ Each module is **self-contained** with:
 ├── modules/
 │   ├── 00-overview/
 │   ├── 01-risk-storming/
+│   ├── 01b-test-data-management/  ← new
 │   ├── 02-vertex-ai-studio/
 │   ├── 03-python-scripting/
 │   ├── 04-prompt-engineering/

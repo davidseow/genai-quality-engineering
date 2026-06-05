@@ -64,13 +64,14 @@ For any risk with a score ≥ 10, define a mitigation before prototyping.
 
 ## Concrete Example — Support Triage Assistant
 
-| # | Failure Mode | Likelihood | Impact | Score | Mitigation |
-|---|--------------|------------|--------|-------|------------|
-| 1 | Misclassifies high-urgency ticket as low | 3 | 5 | 15 | Add confidence threshold; route low-confidence cases to human |
-| 2 | Drafted reply contains PII from a different ticket | 2 | 5 | 10 | Strip PII from input; redact before sending to model |
-| 3 | Model API rate-limit during traffic spike | 3 | 3 | 9 | Implement retry with exponential back-off and queue |
-| 4 | Offensive language in drafted reply | 2 | 4 | 8 | Add output moderation layer |
-| 5 | Incorrect product name in reply | 4 | 2 | 8 | Ground replies with a product knowledge base |
+| # | Failure Mode | Likelihood | Impact | Score | Mitigation | Test Strategy |
+|---|--------------|------------|--------|-------|------------|---------------|
+| 1 | Misclassifies high-urgency ticket as low | 3 | 5 | 15 | Route low-confidence results for human review | Golden-set: ≥20 high-urgency tickets; assert ≥90% correct |
+| 2 | Drafted reply contains PII from ticket body | 2 | 5 | 10 | Strip PII before sending to model | Adversarial test: inject `[NAME]` and `[ADDRESS]` into body; assert absent from reply |
+| 3 | Model API rate-limit during traffic spike | 3 | 3 | 9 | Retry with exponential back-off and queue | Unit test: mock API to return 429 three times; assert RuntimeError raised after max retries |
+| 4 | Offensive language in drafted reply | 2 | 4 | 8 | Enable Vertex AI safety filters | Integration test: send borderline input; assert `finish_reason != SAFETY` handling works |
+| 5 | Incorrect product name in reply | 4 | 2 | 8 | Ground replies with a product knowledge base | Golden-set: tickets mentioning products; review reply manually in sprint demo |
+| 6 | Model version update silently breaks classifications | 3 | 4 | 12 | Pin model version in config; never use "latest" | Regression test: re-run full golden set on every model version bump; block if accuracy drops |
 
 ---
 
@@ -99,4 +100,7 @@ The mitigations you define here become:
 2. Copy `examples/risk_register_template.md` and add at least five failure
    modes of your own.
 3. Score each one and define a mitigation for any risk ≥ 10.
-4. Keep this document — you will refer back to it in every subsequent module.
+4. For every risk ≥ 10, fill in the **Test Strategy** column — describe in one
+   sentence how you will know the mitigation is working. Choose from: golden-set
+   test, adversarial test, unit test with mocking, load test, or manual review.
+5. Keep this document — you will refer back to it in every subsequent module.

@@ -126,6 +126,61 @@ gcloud iam workload-identity-pools providers create-oidc "github-provider" \
 
 ---
 
+## Quality Gates — Do Not Deploy Below a Threshold
+
+Passing tests is necessary but not sufficient for deployment. Add an accuracy
+gate that blocks the deploy job if the golden set falls below a threshold:
+
+```yaml
+  accuracy-gate:
+    needs: [golden-set-eval]
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
+      - run: make install
+      - name: Enforce accuracy gate
+        run: |
+          PYTHONPATH=modules/03-python-scripting/examples \
+          GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }} \
+          uv run python scripts/compute_accuracy.py
+```
+
+The `compute_accuracy.py` script (see Module 05) exits with code 1 if accuracy
+falls below 90%, which causes the `accuracy-gate` job to fail and blocks the
+`deploy` job.
+
+---
+
+## Handling Flaky Tests from Model Non-Determinism
+
+Golden-set tests can be flaky if temperature is too high or the model is
+inconsistent on borderline examples. Strategies:
+
+- **Pin temperature ≤ 0.2** for all CI test runs. Add it to the test runner
+  config, not just the production config.
+- **Pin the model version** in config (`gemini-1.5-pro-002` not `gemini-1.5-pro`).
+  Model updates can change output distribution silently.
+- **Re-run on failure** — if a golden-set test fails, re-run it once before
+  blocking. True regressions fail consistently; flaky tests often pass on retry.
+  ```yaml
+  - run: uv run pytest ... --reruns 1 --reruns-delay 2
+  ```
+  Add `pytest-rerunfailures` to dev dependencies.
+- **Flag borderline examples** — add a `"flaky": true` field in the JSONL for
+  examples that regularly cause disagreement. Skip them in CI; review them
+  manually in sprint demos.
+
+---
+
 ## Prompt Change Policy
 
 Add this to your `CONTRIBUTING.md`:
