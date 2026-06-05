@@ -2,94 +2,82 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## What This Repository Is
-
-A 10-module course teaching quality engineering (QE) for GenAI applications. The code is a teaching scaffold — intentionally minimal, with value in the *structure and patterns* rather than feature completeness. All modules progressively build a **customer support triage assistant** using Google Vertex AI's Gemini models.
-
 ## Commands
 
 ```bash
-# Install all dependencies (requires uv)
-make install          # runs: uv sync --all-groups
+make install          # Install all dependencies (app + dev) via uv
+make eval             # Run the no-API test suite (Layers 0–2)
+make start            # Run the triage CLI (requires GCP_PROJECT_ID env var)
 
-# Run fast tests (layers 0–2, no API calls, no credentials needed)
-make eval
+uv run ruff check .   # Lint
 
-# Run all tests including golden-set (requires GCP credentials)
-GCP_PROJECT_ID=your-project uv run pytest modules/05-evaluation-testing/examples/tests/ -v
+# Run a single test
+PYTHONPATH=modules/03-python-scripting/examples uv run pytest modules/05-evaluation-testing/examples/tests/test_structure.py::test_parse_valid_json -v
 
-# Run a single test file
-uv run pytest modules/05-evaluation-testing/examples/tests/test_retry.py -v
-
-# Run a single test by name
-uv run pytest modules/05-evaluation-testing/examples/tests/test_structure.py::test_valid_parse -v
-
-# Lint
-uv run ruff check .
-
-# Run the triage assistant (requires GCP credentials)
-GCP_PROJECT_ID=your-project python -m triage
+# Run all tests including GCP-dependent ones
+GCP_PROJECT_ID=<project> PYTHONPATH=modules/03-python-scripting/examples uv run pytest modules/05-evaluation-testing/examples/tests/ -v
 ```
+
+`PYTHONPATH=modules/03-python-scripting/examples` is required for every `pytest` or `python -m triage` invocation — the `triage` package lives there and is not installed as a proper package.
 
 ## Architecture
 
-### Core Application
+This is a 10-module course (Modules 00–09) teaching QEs how to test AI applications. The running example throughout is a customer support triage assistant built with Vertex AI / Gemini.
 
-The working source lives in `modules/03-python-scripting/examples/triage/` and is reused across all later modules. It is a four-file package:
+### The triage package (`modules/03-python-scripting/examples/triage/`)
 
-- **`models.py`** — Typed data contracts: `SupportTicket` (subject, body), `TriageResult` (urgency, topic, reply), `Urgency` enum
-- **`prompts.py`** — Prompt text (`SYSTEM_INSTRUCTION`), Gemini structured output schema (`RESPONSE_SCHEMA`), and `build_user_message()`. These are **separated from the API call** so each can be tested independently.
-- **`client.py`** — `triage_ticket()` calls Gemini 1.5 Pro with retry logic (3 attempts, 1s/2s backoff). Private `_parse()` function is a pure function that parses JSON into `TriageResult` — this is the key testing seam.
-- **`__main__.py`** — Minimal entry point demonstrating usage.
+The central application used by every subsequent module:
 
-### Key Design Patterns
+- **`models.py`** — `Urgency(str, Enum)`, `SupportTicket`, `TriageResult` dataclasses
+- **`prompts.py`** — `SYSTEM_INSTRUCTION`, `RESPONSE_SCHEMA` (JSON schema for Vertex AI structured output), `build_user_message(ticket)`
+- **`client.py`** — `triage_ticket(ticket, project_id)` as main entry point; `_parse(text)` as the pure-function parser (testable without API). Uses `response_mime_type="application/json"` + `response_schema` for structured output — not prompt-level JSON instructions. Implements 3-attempt exponential backoff (`_BACKOFF = [1, 2, 4]`).
 
-**Structured output over prompt-level JSON instructions**: The code uses `response_schema` + `response_mime_type="application/json"` in `GenerationConfig`, not instructions like "respond in JSON". This enforces format at the model decoding level; the model cannot violate schema constraints.
+Structured output means the model's JSON format is enforced at the API level via `RESPONSE_SCHEMA`, not by text in the system prompt. This is deliberate — it makes the schema version-controllable and removes the need for markdown fence stripping in `_parse`.
 
-**Pure functions as testing seams**: `_parse(text)` in `client.py` and `build_user_message(ticket)` in `prompts.py` have no side effects and no API calls, making them the primary unit-testing targets.
+### Test suite (`modules/05-evaluation-testing/examples/tests/`)
 
-**Golden sets versioned alongside prompts**: `modules/05-evaluation-testing/examples/tests/golden_set/v1.jsonl` contains labelled test examples. When prompts change, the golden set version must be bumped in the same PR.
+Five-layer testing pyramid — Layers 0–2 require no GCP credentials and are run by `make eval`:
 
-### Test Pyramid (5 Layers)
+| Layer | File | What it tests |
+|-------|------|---------------|
+| 0 | `test_adversarial.py` | Boundary inputs, unicode, prompt injection (GCP tests skip without credentials) |
+| 1 | `test_structure.py` | `_parse()` with valid/invalid JSON — pure unit tests |
+| 2 | `test_retry.py` | Retry contract via `unittest.mock.patch`; asserts exactly 3 attempts, delays [1, 2]s |
+| 3 | `golden_set/` | JSONL-driven accuracy tests (require GCP) |
+| 4 | LLM-as-judge | Described in Module 05 README; not yet implemented |
 
-All tests are in `modules/05-evaluation-testing/examples/tests/`:
+The retry tests patch `vertexai.init` with an `autouse` fixture so no real SDK calls occur.
 
-| Layer | File | API Calls | When to Run |
-|-------|------|-----------|-------------|
-| 0 — Adversarial | `test_adversarial.py` | No (fast path) | Every PR |
-| 1 — Structural | `test_structure.py` | No | Every PR |
-| 2 — Retry contract | `test_retry.py` | No (mocked) | Every PR |
-| 3 — Golden-set | `test_golden_set.py` | Yes | Merge to main |
-| 4 — LLM-as-judge | (template) | Yes | Merge to main |
+### Golden set (`modules/05-evaluation-testing/examples/tests/golden_set/`)
 
-`make eval` runs layers 0–2 only. Layers 3–4 require `GCP_PROJECT_ID`.
+- `v1.jsonl` — 30 labelled examples (10 per urgency class); use `loader.load("v1")` to read
+- Adding new examples: append JSONL lines; bump to `v2.jsonl` when making a breaking label change
+- Any change to `triage/prompts.py` should be accompanied by a golden set update
 
-### Module Progression
-
-Each module is self-contained with a `README.md` and runnable `examples/`:
+### Course module map
 
 ```
-00-overview           → environment setup
-01-risk-storming      → identify failure modes before writing code
-01b-test-data-mgmt    → golden sets, labelling, PII handling
-02-vertex-ai-studio   → interactive prompt prototyping
-03-python-scripting   → convert prototype → typed, testable code  ← core source
-04-prompt-engineering → 6 techniques (structured output, few-shot, CoT, etc.)
-05-evaluation-testing → 5-layer test pyramid  ← primary test suite
-06-observability      → structured logging, metrics, confidence alerts
-07-production-app     → FastAPI + Cloud Run (described in README, not yet implemented)
-08-cicd               → GitHub Actions workflow (template only)
-09-responsible-ai     → safety filters, fairness testing, model card
+00  Environment setup & prerequisites
+01  Risk storming — risk register with Test Strategy column
+01b Test data management — golden set labelling, JSONL format, PII handling
+02  Vertex AI Studio — prototyping without code
+03  Reading the triage codebase (code already written — QEs read, not build)
+04  Prompt engineering — improved_client.py shows few-shot + chain-of-thought
+05  Evaluation & testing — 5-layer pyramid, A/B eval, LLM-as-judge
+06  Observability — structured logging, consistency-as-confidence proxy (3 runs, majority vote)
+07  Production app — FastAPI on Cloud Run, Pub/Sub human-review queue
+08  CI/CD — GitHub Actions, accuracy quality gate, flaky test handling
+09  Responsible AI — safety filters, fairness tests, model card
 ```
 
-## Key Conventions
+### Confidence without logprobs
 
-**Dependencies**: Use `uv` (not pip/poetry). `pyproject.toml` is the source of truth; `shared/requirements.txt` exists for backward compatibility only.
+Gemini does not expose token logprobs. The course uses **consistency as a proxy**: run the model 3× at low temperature and take the majority vote. This is defined in Module 06 and used in Modules 07 and 09. The `confidence_threshold` config field in Module 07's `config.py` example should use `consistency_runs: int = 3` — not a raw float threshold.
 
-**Configuration**: `GCP_PROJECT_ID` and model-related settings come from environment variables. Model version is always pinned (never use `latest`). Temperature ≤0.2 for deterministic classification.
+## Dependency management
 
-**Retry logic**: 3 attempts with exponential backoff (1s, 2s delays before attempts 2 and 3). Mock `time.sleep` in tests to verify backoff without waiting.
+`uv` is the only supported tool. Do not use `pip` directly. Dev dependencies live under `[dependency-groups] dev` in `pyproject.toml`. `pytest-rerunfailures` is included there for `--reruns 1` in CI golden-set runs.
 
-**Linting**: Ruff with line length 100, target Python 3.10. Run before committing.
+## Linting
 
-**Test data**: Golden set examples must include a `notes` field explaining *why* a label was assigned — this is required, not optional.
+Ruff config in `pyproject.toml`: `line-length = 100`, `target-version = "py310"`. No separate `.ruff.toml`.
