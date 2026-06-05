@@ -69,6 +69,12 @@ Rules you must never break:
 
 ### 3. Few-Shot Examples
 
+**"N-shot" notation:** Zero-shot means no examples (just the instruction).
+One-shot means one example. Two-shot means two examples. More examples help
+the model understand expected style and edge cases, but each example adds
+tokens and therefore cost. Two examples is usually the right starting point
+for structured classification tasks.
+
 One or two examples of the desired input/output format dramatically improve
 consistency.
 
@@ -150,16 +156,21 @@ Things worth validating at this layer:
 
 ## Putting It Together
 
-See `examples/improved_prompt.py` for a version of the triage client that
-applies all six techniques.
+See `examples/improved_client.py` for a version of the triage client that
+applies all six techniques. It extends `triage/client.py` with few-shot
+examples, chain-of-thought reasoning in the prompt, and word-count validation
+via `parse_and_validate`.
 
 ---
 
 ## Exercise
 
 1. Open `modules/03-python-scripting/examples/triage/prompts.py`.
-2. Add a two-shot few-shot example to the system instruction.
-3. Update `client.py` to use `safe_parse` from this module.
+2. Add a two-shot example (two input/output pairs) to the system instruction.
+   Remember: "two-shot" means providing two complete examples before the live
+   ticket. The format does not need to be JSON — structured output handles that.
+3. Open `examples/improved_client.py` and read how `parse_and_validate` adds
+   word-count checking on top of the structured output guarantee.
 4. Run the triage module again and confirm the output is still valid.
 5. Deliberately send a ticket that has no subject line — observe what happens
    and decide whether your prompt handles it gracefully.

@@ -11,9 +11,11 @@ identify every testable unit, understand what each function promises and what
 it does not, and map those contracts to the test types you will write in
 Module 05.
 
-> **QE note:** You do not need to build this code from scratch. You need to
-> understand it well enough to test it confidently and to catch regressions
-> when it changes. That is a different — and equally important — skill.
+> **QE note:** The code in `examples/triage/` is already written. Your goal
+> in this module is to read it and understand each file's role — not to type
+> it in. You need to understand it well enough to test it confidently and to
+> catch regressions when it changes. That is a different — and equally
+> important — skill.
 
 ---
 
@@ -31,7 +33,9 @@ production you need:
 
 ---
 
-## Step 1 — Define Your Data Models
+## File 1 — Data Models (`models.py`)
+
+The sections below walk through each file's purpose. Read them as commentary on the code that already exists — not as instructions to build.
 
 ```python
 # triage/models.py
@@ -60,10 +64,10 @@ class TriageResult:
 
 ---
 
-## Step 2 — Separate Prompt Construction
+## File 2 — Prompt Construction (`prompts.py`)
 
-Keep the prompt text and the output schema out of the API call. This makes
-both easy to test and update independently.
+The prompt text and output schema live here, separate from the API call. This
+makes both easy to test and update independently.
 
 The system instruction describes *what to do* — the schema describes *what to
 return*. Keeping them separate means you can tighten the schema without
@@ -108,10 +112,10 @@ def build_user_message(ticket: "SupportTicket") -> str:
 
 ---
 
-## Step 3 — Add Retry Logic
+## File 3 — Client with Retry (`client.py`)
 
-The Vertex AI API is reliable but not perfect. Wrap the call with a simple
-exponential back-off:
+The Vertex AI API is reliable but not perfect. The client wraps the call with
+a simple exponential back-off:
 
 ```python
 # triage/client.py
@@ -154,7 +158,7 @@ def triage_ticket(
     for attempt, wait in enumerate(BACKOFF_SECONDS, start=1):
         try:
             response = model.generate_content(message, generation_config=config)
-            return _parse_response(response.text)
+            return _parse(response.text)
         except Exception as exc:
             logger.warning("Attempt %d failed: %s", attempt, exc)
             last_error = exc
@@ -164,7 +168,7 @@ def triage_ticket(
     raise RuntimeError(f"All {MAX_RETRIES} attempts failed") from last_error
 
 
-def _parse_response(text: str) -> TriageResult:
+def _parse(text: str) -> TriageResult:
     data = json.loads(text)
     return TriageResult(
         urgency=Urgency(data["urgency"]),
@@ -175,7 +179,7 @@ def _parse_response(text: str) -> TriageResult:
 
 ---
 
-## Step 4 — Wire It Together
+## File 4 — Entry Point (`__main__.py`)
 
 ```python
 # triage/__main__.py

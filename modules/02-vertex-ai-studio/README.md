@@ -67,8 +67,11 @@ item. Please help urgently.
 
 ## Step 3 — Enable Structured Output
 
-In Vertex AI Studio, click **Output format** (or **Response format**) and select
-**JSON**. Then paste the following schema into the schema editor:
+In Vertex AI Studio, look for a button labelled **Output format**, **Response
+format**, or **JSON mode** — the label varies across Studio versions. If you
+cannot find it, search the Vertex AI Studio documentation for "structured
+output" to locate it in your current version. Select **JSON** and paste the
+following schema into the schema editor:
 
 ```json
 {
@@ -95,7 +98,7 @@ In Vertex AI Studio, click **Output format** (or **Response format**) and select
 The model's decoding is now constrained to this schema — it cannot produce
 invalid JSON or use unexpected field names.
 
-## Step 3a — Understand the Output
+## Step 4 — Understand the Output
 
 Because structured output is enabled, the response is always clean JSON with no
 markdown fences:
@@ -113,7 +116,7 @@ markdown fences:
 
 ---
 
-## Step 4 — Tune the Parameters
+## Step 5 — Tune the Parameters
 
 | Parameter | What it controls | Try this |
 |-----------|-----------------|----------|
@@ -128,7 +131,7 @@ matters for structured outputs.
 
 ---
 
-## Step 4b — QE Lens: Use Studio to Discover Edge Cases
+## Step 6 — QE Lens: Use Studio to Discover Edge Cases
 
 Before writing a single test in code, Studio lets you explore the model's
 behaviour for free. Spend 10 minutes answering these questions:
@@ -147,7 +150,7 @@ risk register (Module 01). Studio is your cheapest test environment.
 
 ---
 
-## Step 5 — Test Against Your Risk Register
+## Step 7 — Test Against Your Risk Register
 
 Go back to your risk register from Module 01. For each risk with score ≥ 10,
 craft a test input designed to trigger that failure mode.
@@ -163,7 +166,7 @@ does, tighten the system instruction.
 
 ---
 
-## Step 6 — Export as Python
+## Step 8 — Export as Python
 
 Click **\<\> Get code** → **Python**. You will see something like the snippet
 in `examples/exported_prompt.py`. Save this — it is your starting point for

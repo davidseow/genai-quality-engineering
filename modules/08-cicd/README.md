@@ -171,10 +171,10 @@ inconsistent on borderline examples. Strategies:
   Model updates can change output distribution silently.
 - **Re-run on failure** — if a golden-set test fails, re-run it once before
   blocking. True regressions fail consistently; flaky tests often pass on retry.
+  `pytest-rerunfailures` is already in the dev dependencies (`pyproject.toml`):
   ```yaml
   - run: uv run pytest ... --reruns 1 --reruns-delay 2
   ```
-  Add `pytest-rerunfailures` to dev dependencies.
 - **Flag borderline examples** — add a `"flaky": true` field in the JSONL for
   examples that regularly cause disagreement. Skip them in CI; review them
   manually in sprint demos.

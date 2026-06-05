@@ -63,10 +63,17 @@ A practical approach:
 
 1. **Collect real examples** — sample 100 tickets from production (or generate
    realistic synthetic ones if you are pre-launch).
-2. **Label independently** — two people label each ticket for urgency.
-3. **Measure inter-rater agreement** — use Cohen's kappa or simple percentage
-   agreement. Aim for ≥ 80% agreement. Anything below signals the labels
-   themselves are too ambiguous to use as ground truth.
+2. **Label independently** — two people label each ticket for urgency, without
+   discussing their answers first.
+3. **Measure inter-rater agreement** — count how many tickets both labellers
+   agreed on, then divide by the total. Aim for ≥ 80% agreement. If two
+   people agree on 8 out of 10 tickets, that is 80%. Anything below 80%
+   usually means the urgency definition is too vague — clarify it with
+   examples before labelling more.
+
+   Cohen's kappa is a more rigorous version of this measure that accounts
+   for the chance of accidentally agreeing. Use it when you need to document
+   label quality formally (e.g., in a model card for an audit).
 4. **Resolve disagreements** — for tickets where labellers disagreed, discuss
    and either: agree on a label, or exclude the example from the golden set.
 5. **Document edge cases** — flag examples where the "correct" label is
@@ -76,9 +83,19 @@ A practical approach:
 
 ## Step 1 — Store Test Data as JSONL in Version Control
 
-Never hardcode test data in Python files. Store it as JSONL (one JSON object
-per line) alongside the prompt files so that prompt changes and data changes
-travel together in the same commit.
+**What is JSONL?** JSONL (JSON Lines) is a plain text file where each line is
+a complete, valid JSON object. It is easy to append to without rewriting the
+whole file, easy to version-control line-by-line, and easy to stream one
+record at a time without loading the entire file into memory. Example:
+```
+{"subject": "order late", "expected_urgency": "high"}
+{"subject": "returns query", "expected_urgency": "low"}
+```
+Each line can be parsed independently with `json.loads(line)`.
+
+Never hardcode test data in Python files. Store it as JSONL alongside the
+prompt files so that prompt changes and data changes travel together in the
+same commit.
 
 ```
 modules/05-evaluation-testing/examples/tests/
@@ -87,6 +104,9 @@ modules/05-evaluation-testing/examples/tests/
     └── archive/
         └── v0.jsonl      ← previous version (kept for audit)
 ```
+
+This directory already exists in the repository. You will use it in Module 05.
+For now, open `v1.jsonl` to see the format — each line is one labelled example.
 
 Each line in `v1.jsonl`:
 ```json
