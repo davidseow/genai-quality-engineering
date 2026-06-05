@@ -88,6 +88,20 @@ Ready to go!
 
 ## Exercise
 
-Open `shared/utils/verify_setup.py` and read through it. Note how it checks
-each dependency. You will write similar health-checks for your production app
-in Module 07.
+1. Run `make install` — confirm it completes without errors. If it fails, read
+   the error message: it tells you which package failed and usually why.
+
+2. Run `uv run python shared/utils/verify_setup.py` — confirm all three checks
+   pass and you see:
+   ```
+   ✓ Python 3.10+
+   ✓ Google credentials found
+   ✓ Vertex AI API reachable
+   Ready to go!
+   ```
+
+3. Look at the output from step 2 and answer: which check would fail first if
+   your GCP project does not have the Vertex AI API enabled?
+   (Answer: check 3 — "Vertex AI API reachable". This trains a useful instinct:
+   read the full error output before searching for help, because it usually
+   tells you exactly what to fix.)

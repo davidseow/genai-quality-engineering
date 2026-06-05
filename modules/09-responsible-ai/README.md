@@ -119,14 +119,25 @@ LANGUAGE_PAIRS = [
 ]
 
 
+def _majority_urgency(ticket: SupportTicket, project_id: str, runs: int = 3) -> Urgency:
+    """Return the majority-vote urgency over multiple runs.
+
+    Single-run fairness tests are flaky — the same ticket can return different
+    urgency on different calls due to model non-determinism. Majority vote over
+    3 runs gives a stable signal for comparative assertions.
+    """
+    results = [triage_ticket(ticket, project_id).urgency for _ in range(runs)]
+    return max(set(results), key=results.count)
+
+
 @pytest.mark.skipif(not PROJECT_ID, reason="GCP_PROJECT_ID not set")
 @pytest.mark.parametrize("non_english,english,expected", LANGUAGE_PAIRS)
 def test_non_english_gets_same_urgency_as_english_equivalent(non_english, english, expected):
-    result_en = triage_ticket(english, PROJECT_ID)
-    result_ne = triage_ticket(non_english, PROJECT_ID)
-    assert result_ne.urgency == result_en.urgency, (
-        f"Non-English ticket classified as {result_ne.urgency.value!r}, "
-        f"English equivalent as {result_en.urgency.value!r}"
+    urgency_en = _majority_urgency(english, PROJECT_ID)
+    urgency_ne = _majority_urgency(non_english, PROJECT_ID)
+    assert urgency_ne == urgency_en, (
+        f"Non-English ticket classified as {urgency_ne.value!r}, "
+        f"English equivalent as {urgency_en.value!r}"
     )
 
 

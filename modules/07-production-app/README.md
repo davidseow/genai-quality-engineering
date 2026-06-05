@@ -56,7 +56,7 @@ class Settings(BaseSettings):
     gcp_project_id: str
     gcp_location: str = "us-central1"
     model_name: str = "gemini-1.5-pro"
-    confidence_threshold: float = 0.8
+    consistency_runs: int = 3        # runs for majority-vote confidence (see Module 06)
     review_topic: str = "support-triage-review"
 
     class Config:
@@ -124,6 +124,44 @@ async def triage_endpoint(request: TicketRequest) -> TicketResponse:
         return await run_triage(request.subject, request.body)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
+```
+
+---
+
+## Step 3b — Service Layer (`services/triage.py`)
+
+The route delegates to a service layer that imports the Module 03 client and
+applies the consistency-based routing decision from Module 06:
+
+```python
+# app/services/triage.py
+from triage.client import triage_ticket
+from triage.models import SupportTicket
+from ..config import settings
+from ..queue.pubsub import publish_for_review
+
+
+async def run_triage(subject: str, body: str) -> dict:
+    ticket = SupportTicket(subject=subject, body=body)
+
+    # Run multiple times to get a majority-vote confidence score (Module 06)
+    from triage.client import triage_ticket as _call
+    results = [_call(ticket, project_id=settings.gcp_project_id) for _ in range(settings.consistency_runs)]
+    urgencies = [r.urgency for r in results]
+    most_common = max(set(urgencies), key=urgencies.count)
+    confidence = urgencies.count(most_common) / settings.consistency_runs
+
+    result = results[0]  # use the first result for topic/reply
+    routed = confidence < 0.67  # fewer than 2/3 runs agreed
+    if routed:
+        publish_for_review(subject, {"urgency": most_common.value, "confidence": confidence})
+
+    return {
+        "urgency": most_common.value,
+        "topic": result.topic,
+        "reply": result.reply,
+        "routed_for_review": routed,
+    }
 ```
 
 ---

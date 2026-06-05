@@ -101,6 +101,20 @@ The mitigations you define here become:
    modes of your own.
 3. Score each one and define a mitigation for any risk ≥ 10.
 4. For every risk ≥ 10, fill in the **Test Strategy** column — describe in one
-   sentence how you will know the mitigation is working. Choose from: golden-set
-   test, adversarial test, unit test with mocking, load test, or manual review.
+   sentence how you will know the mitigation is working. You will learn these
+   in detail in Module 05; for now, here is enough to choose:
+
+   - **Golden-set test** — run a labelled dataset of real examples through the
+     model and check accuracy (e.g. "≥90% of high-urgency tickets classified
+     correctly").
+   - **Adversarial test** — send hostile or edge-case inputs and check the
+     system does not break (e.g. "prompt injection in the ticket body does not
+     appear in the reply").
+   - **Unit test with mocking** — test a function in isolation without calling
+     the real API, by replacing the API call with a fake that returns a
+     pre-defined response.
+   - **Load test** — send many requests simultaneously and check the system
+     does not crash or slow to an unacceptable level.
+   - **Manual review** — a human checks the output. Used when automated checks
+     are too subjective (e.g. "does this reply sound empathetic?").
 5. Keep this document — you will refer back to it in every subsequent module.

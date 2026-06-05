@@ -19,13 +19,13 @@ Traditional unit tests assert that `f(x) == expected`. GenAI outputs are
 non-deterministic and often free-form text. Testing requires a layered
 approach:
 
-| Layer | What it checks | API calls? | Speed | When to run |
-|-------|---------------|-----------|-------|------------|
-| **0 — Adversarial** | Boundary inputs, injection attempts, empty inputs | No | Fast | Every PR |
-| **1 — Structural** | Output format is valid (JSON keys, enum values) | No | Fast | Every PR |
-| **2 — Retry contract** | Retry logic behaves as documented | No (mocked) | Fast | Every PR |
-| **3 — Golden-set** | Classifications match labelled expected values | Yes | Slow | Merge to main |
-| **4 — LLM-as-judge** | Free-text reply quality scores above threshold | Yes | Slow | Merge to main |
+| Layer | Name | What it checks | API calls? | Speed | When to run |
+|-------|------|---------------|-----------|-------|------------|
+| **0** | **Adversarial** | Boundary inputs, injection attempts, empty inputs | No | Fast | Every PR |
+| **1** | **Structural** | Output format is valid (JSON keys, enum values) | No | Fast | Every PR |
+| **2** | **Retry contract** | Retry logic behaves as documented | No (mocked) | Fast | Every PR |
+| **3** | **Golden-set** | Classifications match labelled expected values | Yes | Slow | Merge to main |
+| **4** | **LLM-as-judge** | Free-text reply quality scores above threshold | Yes | Slow | Merge to main |
 
 Run layers 0–2 on every PR (free, no API costs). Run layers 3–4 on merge to
 main as a quality gate.
@@ -209,9 +209,27 @@ For the free-text `reply` field, use a second model call to score quality.
 ### Two important caveats before you use this
 
 1. **Self-evaluation bias:** A model tends to rate its own style of output
-   highly. Ideally use a different model family as judge, or at minimum
-   calibrate the judge by testing it on known-bad replies and confirming it
-   scores them low.
+   highly. Ideally use a different model family as judge. If you must use the
+   same model family, calibrate the judge first — run it against known-bad
+   replies and confirm it catches them:
+
+   ```python
+   KNOWN_BAD_REPLIES = [
+       ("I'll get this sorted within the hour, guaranteed.", "safe"),     # unsafe promise
+       ("Not my problem, contact the courier directly.", "polite"),       # impolite
+       ("Your issue has been noted.", "actionable"),                      # not actionable
+   ]
+
+   def calibrate_judge() -> None:
+       for reply, criterion in KNOWN_BAD_REPLIES:
+           scores = _judge_reply(reply)
+           assert scores[criterion] <= 2, (
+               f"Judge failed to catch bad reply on '{criterion}': score={scores[criterion]}\n"
+               f"Reply: {reply}"
+           )
+   ```
+   Run `calibrate_judge()` once before using the judge as an automated gate.
+   If it fails, the judge is too lenient on that criterion — refine the prompt.
 
 2. **Judge consistency:** Run the judge 3 times on the same reply. If scores
    differ by ≥ 2 between runs, the criterion is too subjective to use as an
@@ -300,6 +318,7 @@ compare. A prompt change should only land if it is neutral or better:
 
 ```python
 # scripts/ab_eval.py
+import math
 import os
 from triage.client import triage_ticket
 from triage.models import SupportTicket
@@ -307,21 +326,38 @@ from tests.golden_set.loader import load
 
 PROJECT_ID = os.environ["GCP_PROJECT_ID"]
 
-def accuracy(prompt_override=None):
-    examples = load("v1")
-    correct = 0
-    for e in examples:
-        result = triage_ticket(
-            SupportTicket(e.subject, e.body),
-            project_id=PROJECT_ID,
-        )
-        if result.urgency.value == e.expected_urgency:
-            correct += 1
-    return correct / len(examples)
 
-print(f"Current prompt accuracy:  {accuracy():.1%}")
-# Run again with prompt_b to compare
+def accuracy_with_ci(correct: int, total: int) -> tuple[float, float, float]:
+    """Return (accuracy, lower_95ci, upper_95ci) using the Wilson score interval."""
+    z = 1.96
+    p = correct / total
+    denominator = 1 + z ** 2 / total
+    centre = (p + z ** 2 / (2 * total)) / denominator
+    margin = (z * math.sqrt(p * (1 - p) / total + z ** 2 / (4 * total ** 2))) / denominator
+    return p, centre - margin, centre + margin
+
+
+def accuracy(prompt_label: str) -> None:
+    examples = load("v1")
+    correct = sum(
+        1 for e in examples
+        if triage_ticket(SupportTicket(e.subject, e.body), PROJECT_ID).urgency.value
+        == e.expected_urgency
+    )
+    acc, lo, hi = accuracy_with_ci(correct, len(examples))
+    print(f"{prompt_label}: {acc:.1%}  (95% CI: {lo:.1%}–{hi:.1%}, n={len(examples)})")
+
+
+accuracy("Prompt A (current)")
+# Swap prompt in prompts.py, then call accuracy("Prompt B (candidate)")
 ```
+
+**Interpreting results:** With 30 examples the 95% confidence interval spans
+roughly ±18 percentage points. If prompt A is 87% and prompt B is 90%, those
+intervals overlap — the difference is not statistically reliable. You need at
+least 60 examples per class (180 total) to detect a 10-point accuracy
+improvement with 95% confidence. Always report the confidence interval, not
+just the point estimate.
 
 ---
 

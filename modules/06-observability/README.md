@@ -177,10 +177,19 @@ else:
     send_reply(urgency)
 ```
 
-**Trade-off:** This costs 3× the API calls and adds latency. Use it for tickets
-where the cost of a wrong classification is high — e.g., `high` urgency
-misclassified as `low`. Log the confidence score for every request so you can
-track it over time.
+**Trade-off:** This costs 3× the API calls and adds latency. Use the following
+decision framework to decide when it is worth applying:
+
+| Scenario | Recommendation |
+|----------|---------------|
+| Real-time customer-facing response | Run once. Route low-confidence results to the human review queue instead of re-running. |
+| High-urgency tickets only | Run once; if urgency = `high`, re-run 2 more times to confirm before escalating. |
+| Batch / async workflows (e.g., overnight re-scoring) | Always use consistency runs — latency does not matter and accuracy does. |
+| CI/CD evaluation (golden set) | Use consistency runs to reduce flakiness on borderline examples. |
+
+Never apply consistency runs to all traffic unconditionally — the 3× cost is
+only justified when the classification consequence is high. Log the confidence
+score for every request so you can track it over time and tune the threshold.
 
 ---
 
